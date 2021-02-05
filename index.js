@@ -37,6 +37,10 @@ app.get("/api/singlegamebyid/:id", async function (req, res) {
   const data = await pcGame.findById(req.params.id);
   res.json(data);
 });
+app.get("/api/singlegamebyurl/:title", async function (req, res) {
+  const data = await pcGame.find({ url: req.params.title });
+  res.json(data);
+});
 app.post("/api/search", async function (req, res) {
   const searchItem = req.body.search.toLowerCase();
   const data = await pcGame.find({
