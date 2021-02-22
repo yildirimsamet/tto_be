@@ -1,6 +1,10 @@
 const express = require("express");
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 const pcGame = require("./models/pcGames");
+const User = require("./models/User");
+const Joi = require("@hapi/joi");
+const jwt = require("jsonwebtoken");
 const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -15,26 +19,12 @@ mongoose.connect(
     console.log("db baglandı");
   }
 );
-// app.get("/updatealldata", async (req, res) => {
-//   const data = await pcGame.updateMany({}, { viewCount:0});
-//   res.send(data);
-// });
-// app.get("/api", async function (req, res) {
-//   const data = await pcGame.find({});
 
-//   res.json(data);
-// });
-// app.get("/count", async function (req, res) {
-//   const data = await pcGame.countDocuments();
-//   res.json({ count: data });
-// });
+app.get("/", function (req, res) {
+  res.send("Hello");
+});
 
-// app.get("/api/singlegamebyid/:id", async function (req, res) {
-//   const data = await pcGame.findById(req.params.id);
-//   res.json(data);
-// });
-
-// --------------------------------------------------------------------------------------------------------------
+//Get data --------------------------------------------------------------------------------------------------------------
 app.get("/api/singlegamebyurl/:title", async function (req, res) {
   const data = await pcGame.find({ url: req.params.title });
   res.json(data);
@@ -87,6 +77,63 @@ app.get("/pagination/mostviewed/:start", async function (req, res) {
     .limit(8);
   res.json(data);
 });
+app.get("/api/oyunekle", async (req, res) => {
+  const data = await pcGame.insertMany(newGames);
+  res.json({ data });
+});
+//Get data end -------------------------------------------------------------------------------------------------------------------------------------------
+
+//User -------------------------------------------------------------------------------------------------------------------------------
+const userSchema = Joi.object({
+  username: Joi.string().min(3).required(),
+  email: Joi.string().min(6).email().required(),
+  password: Joi.string().min(6).required(),
+});
+app.post("/api/user/signup", async (req, res) => {
+  const isEmailExist = await User.find({ email: req.body.email });
+  if (isEmailExist.length > 0) {
+    return res.json({
+      success: false,
+      reason: "Email'e ait bir kullanıcı zaten bulunmakta.",
+    });
+  }
+  const valid = userSchema.validate(req.body);
+
+  if (valid.error) {
+    return res.json({ success: false, reason: valid.error.details[0].message });
+  }
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(req.body.password, salt);
+  const newUser = await User.create({
+    username: req.body.username,
+    email: req.body.email,
+    password: hashedPassword,
+  });
+  res.json({ success: true, data: newUser });
+});
+
+app.post("/api/user/signin", async (req, res) => {
+  const user = await User.findOne({ email: req.body.email });
+  if (!user) {
+    return res.json({
+      success: false,
+      reason: "Email'e ait bir kullanıcı bulunamadı.",
+    });
+  }
+  const isPasswordValid = await bcrypt.compare(
+    req.body.password,
+    user.password
+  );
+  if (!isPasswordValid) {
+    res.json({ success: false, reason: "Parolanız yanlış." });
+  }
+  const token = jwt.sign(
+    { _id: user._id, username: user.username, email: user.email },
+    process.env.JWT_SECRET
+  );
+  res.json({ success: true, token });
+});
+//User end -------------------------------------------------------------------------------------------------------------------------------------------
 
 app.listen(PORT, () => {
   console.log(`Server running on ${PORT}`);
